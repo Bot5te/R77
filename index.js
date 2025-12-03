@@ -4,8 +4,7 @@ const cheerio = require("cheerio");
 const { format, addDays } = require("date-fns");
 const { toZonedTime } = require("date-fns-tz");
 const pino = require("pino");
-const fetch = require('node-fetch'); // خليه زي ما هو
-global.fetch = fetch;                 // أضف السطر ده بعده
+const fetch = (...args) => import('node-fetch').then(module => module.default(...args));                 // أضف السطر ده بعده
 
 // ================= إعدادات البوت =================
 const LOGIN_EMAIL = "mm2872564@gmail.com";
