@@ -1,0 +1,24 @@
+{
+  "name": "wardyati-bot",
+  "version": "1.0.0",
+  "description": "بوت ورديات جراحة غدد - يتخطى Cloudflare بـ FlareSolverr",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "latest",
+    "cheerio": "latest",
+    "date-fns": "latest",
+    "date-fns-tz": "latest",
+    "express": "latest",
+    "pino": "latest",
+    "qrcode": "latest",
+    "node-fetch": "^3.3.2"
+  },
+  "type": "module"
+}
