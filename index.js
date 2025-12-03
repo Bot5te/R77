@@ -88,7 +88,7 @@ async function startBot() {
             const minute = nowEgypt.getMinutes();
             const today = format(nowEgypt, "yyyy-MM-dd");
 
-            if (hour === 11 && minute < 45 && lastSentDate !== today) {
+            if (hour === 12 && minute < 45 && lastSentDate !== today) {
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري جلب ورديات الغد...`);
                 console.log("-".repeat(60));
 
@@ -108,7 +108,7 @@ async function startBot() {
         } catch (err) {
             console.error("خطأ في الجدولة:", err.message);
         }
-    }, 9000); // كل 9 ثواني مثل البوت الأصلي
+    }, 5000000); // كل 9 ثواني مثل البوت الأصلي
 }
 
 // ================= جلب الورديات مع retry قوي جدًا (أقوى من البايثون) =================
