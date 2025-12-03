@@ -15,7 +15,7 @@ const TARGET_GROUP_ID = "120363410674115070@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
-// ================= دالة إعادة المحاولة القوية (مثل الـ Python بالضبط) =================
+// ================= دالة إعادة المحاولة القوية =================
 const MAX_RETRIES = 5;
 const BASE_DELAY = 7;
 
@@ -38,7 +38,7 @@ async function retry(fn) {
     }
 }
 
-// ================= بدء البوت مع حماية كاملة =================
+// ================= بدء البوت =================
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState("./auth");
     const version = [2, 3000, 1027934701];
@@ -71,6 +71,41 @@ async function startBot() {
 
         if (connection === "open") {
             console.log("تم الاتصال بنجاح بواتساب! البوت شغال 24/7 ولن يسقط أبدًا");
+
+            // === الجدولة اليومية تبدأ هنا فقط بعد الاتصال الناجح ===
+            setInterval(async () => {
+                try {
+                    const nowEgypt = toZonedTime(new Date(), "Africa/Cairo");
+                    const currentTime = format(nowEgypt, "HH:mm:ss");
+                    const currentDate = format(nowEgypt, "yyyy-MM-dd");
+
+                    console.log(`التشيك الحالي: ${currentTime} بتوقيت مصر | التاريخ: ${currentDate} | lastSentDate: ${lastSentDate || "لا يوجد"}`);
+
+                    const hour = nowEgypt.getHours();
+                    const minute = nowEgypt.getMinutes();
+
+                    if (hour === 13 && minute < 45 && lastSentDate !== currentDate) {
+                        console.log(`\n[${currentTime}] جاري جلب ورديات الغد...`);
+                        console.log("-".repeat(60));
+
+                        const result = await fetchTomorrowShiftsWithRetry();
+
+                        if (result) {
+                            const message = formatMessage(result);
+                            await sock.sendMessage(TARGET_GROUP_ID, { text: message });
+                            console.log("تم إرسال ورديات الغد بنجاح إلى الجروب!");
+                        } else {
+                            await sock.sendMessage(TARGET_GROUP_ID, { text: "فشل جلب الورديات اليوم... سأحاول غدًا إن شاء الله" });
+                        }
+
+                        console.log("-".repeat(60));
+                        lastSentDate = currentDate;
+                    }
+                } catch (err) {
+                    console.error("خطأ في الجدولة:", err.message);
+                }
+            }, 60000); // كل دقيقة بالضبط
+            // === انتهى الجدولة ===
         }
 
         if (connection === "close") {
@@ -79,41 +114,9 @@ async function startBot() {
             if (shouldReconnect) setTimeout(startBot, 5000);
         }
     });
-
-    // ================= الجدولة اليومية (من 8:00 إلى 8:44 صباحًا) =================
-    setInterval(async () => {
-        try {
-            const nowEgypt = toZonedTime(new Date(), "Africa/Cairo");
-            console.log(`التشيك الحالي: ${format(nowEgypt, "HH:mm:ss")} بتوقيت مصر - اليوم: ${format(nowEgypt, "yyyy-MM-dd")}`);  // ← التعديل الجديد: طباعة الوقت في كل فحص
-            
-            const hour = nowEgypt.getHours();
-            const minute = nowEgypt.getMinutes();
-            const today = format(nowEgypt, "yyyy-MM-dd");
-
-            if (hour === 13 && minute < 45 && lastSentDate !== today) {
-                console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري جلب ورديات الغد...`);
-                console.log("-".repeat(60));
-
-                const result = await fetchTomorrowShiftsWithRetry();
-
-                if (result) {
-                    const message = formatMessage(result);
-                    await sock.sendMessage(TARGET_GROUP_ID, { text: message });
-                    console.log("تم إرسال ورديات الغد بنجاح إلى الجروب!");
-                } else {
-                    await sock.sendMessage(TARGET_GROUP_ID, { text: "فشل جلب الورديات اليوم... سأحاول غدًا إن شاء الله" });
-                }
-
-                console.log("-".repeat(60));
-                lastSentDate = today;
-            }
-        } catch (err) {
-            console.error("خطأ في الجدولة:", err.message);
-        }
-    }, 60000); // كل دقيقة (60 ثانية) عشان الـ Logs تبقى نظيفة وما تستهلكش موارد زيادة
 }
 
-// ================= جلب الورديات مع retry قوي جدًا (أقوى من البايثون) =================
+// ================= جلب الورديات =================
 async function fetchTomorrowShiftsWithRetry() {
     return await retry(async () => {
         const tomorrow = addDays(new Date(), 1);
@@ -121,7 +124,7 @@ async function fetchTomorrowShiftsWithRetry() {
         const year = tomorrow.getFullYear();
         const month = tomorrow.getMonth() + 1;
 
-        // 1. تسجيل الدخول
+        // تسجيل الدخول
         const loginPage = await cloudscraper.get("https://wardyati.com/login/");
         const $ = cheerio.load(loginPage);
         const csrf = $('input[name="csrfmiddlewaretoken"]').val() || "";
@@ -132,7 +135,7 @@ async function fetchTomorrowShiftsWithRetry() {
             followAllRedirects: true,
         });
 
-        // 2. البحث عن الغرفة
+        // البحث عن الغرفة
         const home = await cloudscraper.get("https://wardyati.com/rooms/");
         const $$ = cheerio.load(home);
         let roomUrl = null;
@@ -149,7 +152,7 @@ async function fetchTomorrowShiftsWithRetry() {
 
         if (!roomUrl) throw new Error("لم يتم العثور على الغرفة");
 
-        // 3. جلب الورديات
+        // جلب الورديات
         const arena = await cloudscraper.get(roomUrl + "arena/", {
             qs: { view: "monthly", year, month },
         });
@@ -241,7 +244,7 @@ function formatMessage(r) {
     return text.trim();
 }
 
-// ================= سيرفر الـ QR =================
+// ================= سيرفر الـ QR (اختياري) =================
 require("express")()
     .get("/", (req, res) => {
         res.send(global.qrImage
@@ -249,11 +252,11 @@ require("express")()
             : `<h1>جاري توليد الـ QR... انتظر</h1><script>setTimeout(() => location.reload(), 3000);</script>`
         );
     })
-    .listen(5000, () => console.log("QR: http://localhost:5000"));
+    .listen(5000, () => console.log("QR Server: http://localhost:5000"));
 
-// ================= حماية نهائية: لو الكود كله وقع =================
+// ================= حماية نهائية =================
 process.on("uncaughtException", (err) => {
-    console.error("خطأ غير متوقع! البوت سيعيد التشغيل:", err.message);
+    console.error("خطأ غير متوقع! إعادة تشغيل البوت...", err.message);
     setTimeout(startBot, 10000);
 });
 
