@@ -244,7 +244,7 @@ async function startBot() {
                     const minute = now.getMinutes();
                     const dateStr = format(now, "yyyy-MM-dd");
 
-                    if (hour === 18 && minute < 45 && lastSentDate !== dateStr) {
+                    if (hour === 18 && minute < 59 && lastSentDate !== dateStr) {
                         console.log(`[${format(now, "HH:mm:ss")}] جاري جلب ورديات الغد...`);
                         const result = await fetchTomorrowShifts();
                         const message = result ? formatMessage(result) : "فشل جلب الورديات النهاردة";
