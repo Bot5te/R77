@@ -149,7 +149,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // من 8:00 إلى 8:44 صباحًا (يمكنك تغييرها إلى 10:00 زي ما تحب)
-            if (hour === 8 && minute < 45 && lastSentDate !== todayStr) {
+            if (hour === 22 && minute < 55 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد في الـ Gist...`);
 
