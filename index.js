@@ -1,283 +1,321 @@
-import cloudscraper
-from bs4 import BeautifulSoup
-import json
-from urllib.parse import urljoin
-from datetime import datetime, timedelta
-import pytz
-import time
-import random
-import logging
-import traceback
-from app import server 
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
+const qrcode = require("qrcode");
+const { format, addDays } = require("date-fns");
+const { toZonedTime } = require("date-fns-tz");
+const pino = require("pino");
+const { Session } = require("curl-cffi"); // ← هذا هو السلاح السري
+const cheerio = require("cheerio");
 
-# ================= إعداد Logging ليعمل ممتاز على Render =================
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(message)s',
-    datefmt='%H:%M:%S'
-)
-log = logging.getLogger(__name__)
+// ================= إعدادات البوت =================
+const LOGIN_EMAIL = "mm2872564@gmail.com";
+const LOGIN_PASSWORD = "Mm@12345";
+const ROOM_TEXT = "شيفتات جراحة غدد شهر 12"; // غيّر الشهر كل شهر
+const TARGET_GROUP_ID = "120363410674115070@g.us"; // جروبك
 
-# لضمان ظهور كل شيء في Render Logs حتى لو كان هناك buffering
-import sys
-sys.stdout.reconfigure(line_buffering=True)
+let lastSentDate = null;
+global.qrImage = null;
 
-# ================= إعدادات إعادة المحاولة =================
-MAX_RETRIES = 5
-BASE_DELAY = 7
+// بصمات متصفح حديثة (تحديث 2025)
+const BROWSER_FINGERPRINTS = [
+  "chrome124", "chrome123", "chrome122", "chrome120",
+  "edge122", "edge120", "safari18_0", "safari17_5"
+];
 
-def retry(func):
-    def wrapper(*args, **kwargs):
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                wait = BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 5)
-                now = datetime.now(pytz.timezone('Africa/Cairo')).strftime('%H:%M:%S')
-                tb = traceback.format_exc()
-                log.error(f"[{now}] خطأ ({attempt}/{MAX_RETRIES}): {e}\n{tb}")
-                if attempt == MAX_RETRIES:
-                    log.error("فشل نهائي في هذه الخطوة، ننتقل...")
-                    return None
-                log.warning(f"إعادة المحاولة بعد {wait:.1f} ثانية...")
-                time.sleep(wait)
-        return None
-    return wrapper
+async function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-def get_egypt_time():
-    return datetime.now(pytz.timezone('Africa/Cairo'))
+async function fetchTomorrowShifts() {
+  const tomorrow = addDays(new Date(), 1);
+  const targetDate = format(tomorrow, "yyyy-MM-dd");
+  const year = tomorrow.getFullYear();
+  const month = tomorrow.getMonth() + 1;
 
-# قائمة User-Agent عشوائية لتقليد متصفحات مختلفة
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-]
+  // 3 محاولات ببصمات مختلفة
+  for (let i = 0; i < 3; i++) {
+    const fingerprint = BROWSER_FINGERPRINTS[Math.floor(Math.random() * BROWSER_FINGERPRINTS.length)];
+    console.log(`محاولة ${i + 1} - استخدام بصمة: ${fingerprint}`);
 
-def get_random_headers(referer=None):
-    headers = {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1'
-    }
-    if referer:
-        headers['Referer'] = referer
-    return headers
+    const session = new Session({
+      impersonate: fingerprint,
+      timeout: 30000,
+    });
 
-@retry
-def safe_get(scraper, url, **kwargs):
-    headers = get_random_headers(kwargs.get('referer'))
-    log.info(f"GET → {url} | params={kwargs.get('params')} | headers={headers}")
-    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.get(url, timeout=25, headers=headers, **kwargs)
-    log.info(f"← {resp.status_code} من {url}")
-    resp.raise_for_status()
-    return resp
+    try {
+      // 1. جلب صفحة تسجيل الدخول
+      await delay(2000 + Math.random() * 3000);
+      let res = await session.get("https://wardyati.com/login/");
+      if (res.status !== 200) continue;
 
-@retry
-def safe_post(scraper, url, **kwargs):
-    headers = get_random_headers(kwargs.get('referer'))
-    log.info(f"POST → {url} | headers={headers}")
-    time.sleep(random.uniform(1, 3))  # تأخير عشوائي بشري
-    resp = scraper.post(url, timeout=25, headers=headers, **kwargs)
-    if resp.status_code not in (200, 302):
-        raise Exception(f"فشل POST: {resp.status_code} | {resp.text[:500]}")
-    log.info(f"← {resp.status_code} بعد POST")
-    return resp
+      const $ = cheerio.load(res.data);
+      let csrfToken = $('input[name="csrfmiddlewaretoken"]').val();
 
-def fetch_and_print_shifts():
-    log.info("=== بدء جلب ورديات الغد ===")
-    try:
-        # إنشاء scraper مع خيارات لتجاوز الحماية
-        scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            },
-            delay=5,  # إبطاء لتجنب الكشف
-            interpreter='js2py',  # للتعامل مع تحديات JS إذا وجدت
-            debug=True  # لتسجيل تفاصيل للتشخيص
-        )
+      // لو ما لقاش في الـ HTML، يجيبه من الكوكيز
+      if (!csrfToken) {
+        const cookies = await session.cookies.get("https://wardyati.com");
+        const csrfCookie = cookies.find(c => c.name === "csrftoken");
+        csrfToken = csrfCookie ? csrfCookie.value : null;
+      }
 
-        # 1. تسجيل الدخول
-        login_page = safe_get(scraper, 'https://wardyati.com/login/', referer='https://wardyati.com/')
-        if not login_page:
-            return False
+      if (!csrfToken) {
+        console.log("فشل استخراج CSRF token");
+        continue;
+      }
 
-        soup = BeautifulSoup(login_page.text, 'html.parser')
-        csrf = soup.find('input', {'name': 'csrfmiddlewaretoken'})
-        csrf_token = csrf['value'] if csrf else ''
-        if not csrf_token:
-            log.error("لم يتم العثور على csrf token")
-            return False
+      console.log("تم استخراج CSRF token");
 
-        login_data = {
-            'username': 'mm2872564@gmail.com',
-            'password': 'Mm@12345',
-            'csrfmiddlewaretoken': csrf_token,
+      // 2. تسجيل الدخول
+      await delay(1500 + Math.random() * 2000);
+      await session.post("https://wardyati.com/login/", {
+        form: {
+          username: LOGIN_EMAIL,
+          password: LOGIN_PASSWORD,
+          csrfmiddlewaretoken: csrfToken,
+        },
+        headers: {
+          "Referer": "https://wardyati.com/login/",
+        },
+      });
+
+      // فحص هل الدخول نجح ولا لأ
+      const testRes = await session.get("https://wardyati.com/rooms/");
+      if (testRes.status !== 200 || testRes.data.includes("تسجيل الدخول")) {
+        console.log("فشل تسجيل الدخول");
+        continue;
+      }
+
+      console.log("تم تسجيل الدخول بنجاح");
+
+      // 3. جلب رابط الغرفة
+      const $$ = cheerio.load(testRes.data);
+      let roomUrl = null;
+
+      $$('div.overflow-wrap').each((i, el) => {
+        if ($$(el).text().includes(ROOM_TEXT)) {
+          const href = $$(el).closest('.card-body').find('a.stretched-link').attr('href');
+          if (href) {
+            roomUrl = href.startsWith("http") ? href : "https://wardyati.com" + href;
+            return false;
+          }
+        }
+      });
+
+      if (!roomUrl) {
+        console.log("لم يتم العثور على الغرفة:", ROOM_TEXT);
+        continue;
+      }
+
+      console.log("تم العثور على الغرفة:", roomUrl);
+
+      // 4. جلب بيانات الشهر
+      await delay(1000 + Math.random() * 2000);
+      const arenaRes = await session.get(roomUrl + "arena/", {
+        params: { view: "monthly", year, month },
+      });
+
+      if (arenaRes.status !== 200) continue;
+
+      let data;
+      try {
+        data = JSON.parse(arenaRes.data);
+      } catch (e) {
+        console.log("فشل تحليل JSON من arena");
+        continue;
+      }
+
+      if (!data.shift_instances_by_date?.[targetDate]) {
+        return {
+          date: format(tomorrow, "EEEE dd/MM"),
+          message: "لا توجد ورديات الغد (إجازة أو لم تُحدد بعد)"
+        };
+      }
+
+      const shifts = {};
+
+      for (const shift of data.shift_instances_by_date[targetDate]) {
+        const type = shift.shift_type_name || "Unknown";
+        const detailsUrl = "https://wardyati.com" + shift.get_shift_instance_details_url;
+
+        await delay(800 + Math.random() * 1200);
+
+        const detailsRes = await session.get(detailsUrl, {
+          headers: { "HX-Request": "true" }
+        });
+
+        if (detailsRes.status !== 200) continue;
+
+        let details;
+        try {
+          details = JSON.parse(detailsRes.data);
+        } catch {
+          continue;
         }
 
-        login_resp = safe_post(scraper, 'https://wardyati.com/login/', data=login_data,
-                               referer='https://wardyati.com/login/', allow_redirects=True)
-        if not login_resp or 'ممنوع' in login_resp.text or '403' in login_resp.text:
-            log.error("فشل تسجيل الدخول - ربما تم حظر الـ IP أو تغيّر الكود")
-            log.error(f"جزء من الرد: {login_resp.text[:1000]}")
-            return False
+        for (const h of details.holdings || []) {
+          const name = h.apparent_name || "غير معروف";
+          let phone = "";
 
-        log.info("تم تسجيل الدخول بنجاح")
+          if (h.urls?.get_member_info) {
+            await delay(500 + Math.random() * 800);
+            try {
+              const memRes = await session.get("https://wardyati.com" + h.urls.get_member_info, {
+                headers: { "HX-Request": "true" }
+              });
+              if (memRes.status === 200) {
+                const memData = JSON.parse(memRes.data);
+                phone = memData.room_member?.contact_info || "";
+              }
+            } catch (e) { /* تجاهل */ }
+          }
 
-        # باقي الكود كما هو مع إضافة log في كل خطوة مهمة
-        home = safe_get(scraper, 'https://wardyati.com/rooms/', referer='https://wardyati.com/login/')
-        if not home:
-            return False
+          shifts[type] = shifts[type] || [];
+          shifts[type].push({ name, phone });
+        }
+      }
 
-        soup = BeautifulSoup(home.text, 'html.parser')
-        target_text = 'شيفتات جراحة غدد شهر 12'
-        room_link = None
-        for div in soup.find_all('div', class_='overflow-wrap'):
-            if target_text in div.text.strip():
-                card = div.find_parent('div', class_='card-body')
-                if card:
-                    a = card.find('a', class_='stretched-link')
-                    if a:
-                        room_link = urljoin('https://wardyati.com/', a.get('href'))
-                        log.info(f"تم العثور على الغرفة: {room_link}")
-                        break
+      // نجاح! نرجع البيانات
+      return { date: format(tomorrow, "EEEE dd/MM"), shifts };
 
-        if not room_link:
-            log.error("لم يتم العثور على الغرفة - تأكد من النص 'شيفتات جراحة غدد شهر 12'")
-            return False
+    } catch (err) {
+      console.log(`محاولة ${i + 1} فشلت:`, err.message);
+      await delay(3000);
+      continue;
+    } finally {
+      await session.close(); // مهم جدًا
+    }
+  }
 
-        tomorrow = get_egypt_time() + timedelta(days=1)
-        target_date = tomorrow.strftime('%Y-%m-%d')
-        target_year = tomorrow.year
-        target_month = tomorrow.month
+  // لو وصلنا هنا يعني كل المحاولات فشلت
+  console.log("فشل جلب الورديات بعد 3 محاولات");
+  return null;
+}
 
-        arena_url = urljoin(room_link, 'arena/')
-        arena_resp = safe_get(scraper, arena_url, params={
-            'view': 'monthly',
-            'year': target_year,
-            'month': target_month
-        }, referer=room_link)
-        if not arena_resp:
-            return False
+function formatMessage(result) {
+  if (!result) return "فشل جلب ورديات الغد اليوم";
 
-        try:
-            data = json.loads(arena_resp.text)
-            log.info(f"تم جلب بيانات الشهر بنجاح - عدد الأيام: {len(data.get('shift_instances_by_date', {}))}")
-        except Exception as e:
-            log.error(f"فشل تحليل JSON من arena: {e}")
-            log.error(f"الرد الخام: {arena_resp.text[:1000]}")
-            return False
+  if (result.message) {
+    return `ورديات الغد\n${result.date}\n══════════════════════════════\n${result.message}`;
+  }
 
-        if target_date not in data.get('shift_instances_by_date', {}):
-            day_name = tomorrow.strftime('%A')
-            formatted = tomorrow.strftime('%d/%m')
-            log.info(f"لا توجد ورديات يوم الغد: {day_name} {formatted}")
-            return True
+  let text = `ورديات الغد\n${result.date}\n══════════════════════════════\n\n`;
 
-        # باقي الكود مع try/except حول كل جزء حساس
-        shifts_by_type = {}
-        for shift in data['shift_instances_by_date'][target_date]:
-            shift_type = shift.get('shift_type_name', 'Unknown')
-            details_url = urljoin('https://wardyati.com/', shift['get_shift_instance_details_url'])
+  const order = ["Day", "Day Work", "Night"];
+  const seen = new Set();
 
-            details_resp = safe_get(scraper, details_url, headers={'HX-Request': 'true'}, referer=arena_url)
-            if not details_resp:
-                continue
+  for (const type of order) {
+    if (result.shifts[type]) {
+      text += `${type}\n`;
+      for (const p of result.shifts[type]) {
+        const key = `${p.name}|${p.phone}`;
+        if (!seen.has(key)) {
+          text += `• ${p.name}\n`;
+          if (p.phone) text += `  (${p.phone})\n`;
+          seen.add(key);
+        }
+      }
+      text += "\n";
+    }
+  }
 
-            try:
-                details = json.loads(details_resp.text)
-                for h in details.get('holdings', []):
-                    name = h.get('apparent_name', 'غير معروف')
-                    phone = ''
-                    member_url = h.get('urls', {}).get('get_member_info')
-                    if member_url:
-                        mem_resp = safe_get(scraper, urljoin('https://wardyati.com/', member_url),
-                                            headers={'HX-Request': 'true'}, referer=details_url)
-                        if mem_resp:
-                            try:
-                                mdata = json.loads(mem_resp.text)
-                                phone = mdata.get('room_member', {}).get('contact_info', '')
-                            except:
-                                pass
-                    shifts_by_type.setdefault(shift_type, []).append({'name': name, 'phone': phone})
-            except Exception as e:
-                log.error(f"خطأ أثناء معالجة تفاصيل الشيفت: {e}")
+  // باقي الأنواع
+  for (const type in result.shifts) {
+    if (!order.includes(type)) {
+      text += `${type}\n`;
+      for (const p of result.shifts[type]) {
+        const key = `${p.name}|${p.phone}`;
+        if (!seen.has(key)) {
+          text += `• ${p.name}\n`;
+          if (p.phone) text += `  (${p.phone})\n`;
+          seen.add(key);
+        }
+      }
+      text += "\n";
+    }
+  }
 
-        # طباعة النتيجة النهائية
-        day_name = tomorrow.strftime('%A')
-        formatted = tomorrow.strftime('%d/%m')
-        log.info(f"\nورديات الغد: {day_name} {formatted}")
-        log.info("=" * 50)
+  return text.trim();
+}
 
-        order = ['Day', 'Day Work', 'Night']
-        printed = set()
+// ================= باقي الكود (WhatsApp + QR) بدون تغيير =================
+async function connectToWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState("./auth");
 
-        for st in order + list(shifts_by_type.keys()):
-            if st in shifts_by_type and st not in printed:
-                log.info(f"\n{st}")
-                seen = set()
-                for p in shifts_by_type[st]:
-                    key = (p['name'], p['phone'])
-                    if key not in seen:
-                        seen.add(key)
-                        log.info(f'"{p["name"]}')
-                        if p['phone']:
-                            log.info(f'({p["phone"]})')
-                printed.add(st)
+  const sock = makeWASocket({
+    version: [2, 3000, 1027934701],
+    auth: state,
+    printQRInTerminal: false,
+    logger: pino({ level: "silent" }),
+    browser: ["WardYati Bot", "Chrome", "124.0"],
+    connectTimeoutMs: 60_000,
+    keepAliveIntervalMs: 30_000,
+  });
 
-        log.info("=" * 50)
-        return True
+  sock.ev.on("creds.update", saveCreds);
 
-    except Exception as e:
-        log.error("خطأ غير متوقع في fetch_and_print_shifts:")
-        log.error(traceback.format_exc())
-        return False
+  sock.ev.on("connection.update", (update) => {
+    const { connection, qr } = update;
 
-# ================= الحلقة الرئيسية =================
-def main():
-    log.info("البوت شغال الآن - يطبع ورديات الغد يوميًا")
-    log.info("-" * 70)
+    if (qr) {
+      console.clear();
+      console.log("امسح الـ QR الجديد:");
+      qrcode.toDataURL(qr, (err, url) => {
+        if (!err) {
+          global.qrImage = url;
+          console.log("http://localhost:5000");
+        }
+      });
+    }
 
-    last_printed_date = None
+    if (connection === "open") {
+      console.log("تم الاتصال بنجاح! البوت شغال 24/7");
+    }
 
-    while True:
-        try:
-            now = get_egypt_time()
-            current_date = now.strftime('%Y-%m-%d')
-            current_hour = now.hour
-            current_minute = now.minute
+    if (connection === "close") {
+      const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      if (shouldReconnect) {
+        console.log("جاري إعادة الاتصال...");
+        setTimeout(connectToWhatsApp, 5000);
+      }
+    }
+  });
 
-            if current_hour == 14 and current_minute < 30 and last_printed_date != current_date:
-                log.info(f"[{now.strftime('%H:%M:%S')}] جاري جلب ورديات الغد...")
-                success = fetch_and_print_shifts()
-                if success:
-                    last_printed_date = current_date
-                log.info("-" * 60)
+  // الجدولة اليومية (الساعة 10 صباحًا)
+  setInterval(async () => {
+    try {
+      const nowEgypt = toZonedTime(new Date(), "Africa/Cairo");
+      const hour = nowEgypt.getHours();
+      const minute = nowEgypt.getMinutes();
+      const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
-            time.sleep(20)
+      if (hour === 10 && minute < 55 && lastSentDate !== todayStr) {
+        console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري جلب ورديات الغد...`);
 
-        except Exception as e:
-            log.error("خطأ في الحلقة الرئيسية:")
-            log.error(traceback.format_exc())
-            time.sleep(10)
+        const result = await fetchTomorrowShifts();
 
-if __name__ == "__main__":
-    server()          # يشتغل الـ web server إذا كان موجود
-    try:
-        main()
-    except KeyboardInterrupt:
-        log.info("تم إيقاف البوت يدويًا")
-    except Exception as e:
-        log.error(f"خطأ فادح: {e}")
-        log.error(traceback.format_exc())
+        if (result) {
+          const message = formatMessage(result);
+          await sock.sendMessage(TARGET_GROUP_ID, { text: message });
+          console.log("تم إرسال الورديات بنجاح!");
+        } else {
+          await sock.sendMessage(TARGET_GROUP_ID, { text: "فشل جلب الورديات اليوم... سأحاول غدًا" });
+        }
+
+        lastSentDate = todayStr;
+        console.log("-".repeat(60));
+      }
+    } catch (err) {
+      console.error("خطأ في الجدولة:", err.message);
+    }
+  }, 10_000);
+}
+
+require("express")()
+  .get("/", (req, res) => {
+    res.send(global.qrImage
+      ? `<center><h1>امسح الـ QR</h1><img src="${global.qrImage}" width="400"></center>`
+      : `<h1>جاري توليد QR... انتظر</h1><script>setTimeout(()=>location.reload(),3000)</script>`
+    );
+  })
+  .listen(5000, () => console.log("افتح: http://localhost:5000"));
+
+connectToWhatsApp();
