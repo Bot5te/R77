@@ -1,68 +1,146 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const qrcode = require("qrcode");
-const fetch = require("node-fetch");
 const { format, addDays } = require("date-fns");
 const { toZonedTime } = require("date-fns-tz");
 const pino = require("pino");
+const fetch = require("node-fetch"); // تأكد من تثبيته: npm install node-fetch@2
 
-// ================= إعدادات البوت =================
+// ================= إعدادات Gist =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
+const SHIFTS_GIST_FILENAME = "shifts_data.json";
 const part1 = "ghp_26iDRXBM6Vh9m";
 const part2 = "egs7uCr6eEMi3It0T0UB3xJ";
 
 const GITHUB_TOKEN = part1 + part2;
 
-const SHIFTS_GIST_FILENAME = "shifts_data.json";
-const TARGET_GROUP_ID = "120363410674115070@g.us"; // معرف الجروب اللي هيرسل فيه
 
+const GIST_API_URL = `https://api.github.com/gists/${GIST_ID}`;
+const HEADERS = {
+    "Authorization": `token ${GITHUB_TOKEN}`,
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "Wardyati-Bot"
+};
+
+// ================= إعدادات البوت =================
+const TARGET_GROUP_ID = "120363410674115070@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
-// ================= بدء الاتصال بواتساب =================
-async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState("./auth");
+// ================= جلب بيانات الورديات من Gist =================
+async function fetchShiftsFromGist() {
+    try {
+        const response = await fetch(GIST_API_URL, { headers: HEADERS });
+        if (!response.ok) throw new Error(`Gist HTTP ${response.status}`);
 
-    const version = [2, 3000, 1027934701]; // إصدار ثابت = لا يفصل أبدًا
+        const gist = await response.json();
+        const file = gist.files[SHIFTS_GIST_FILENAME];
 
-    const sock = makeWASocket({
-        version,
-        auth: state,
-        printQRInTerminal: false,
-        logger: pino({ level: "silent" }),
-        browser: ["Chrome (Linux)", "Chrome", "121.0.6167.140"],
-        connectTimeoutMs: 60_000,
-        keepAliveIntervalMs: 30_000,
-    });
+        if (!file || !file.content) {
+            console.log("لم يتم العثور على ملف shifts_data.json في الـ Gist");
+            return null;
+        }
 
-    sock.ev.on("creds.update", saveCreds);
+        const data = JSON.parse(file.content);
+        const tomorrow = format(addDays(new Date(), 1), "yyyy-MM-dd");
 
-    sock.ev.on("connection.update", (update) => {
-        const { connection, qr } = update;
+        if (!data[tomorrow]) {
+            console.log(`لا توجد ورديات ليوم الغد (${tomorrow}) في الـ Gist`);
+            return null;
+        }
 
-        if (qr) {
-            console.clear();
-            console.log("تم توليد QR جديد! امسحه بسرعة:");
-            qrcode.toDataURL(qr, (err, url) => {
-                if (!err) {
-                    global.qrImage = url;
-                    console.log("افتح الرابط لرؤية الـ QR: http://localhost:5000");
+        console.log(`تم العثور على ورديات الغد (${tomorrow}) في الـ Gist`);
+        return { dateKey: tomorrow, shiftsData: data[tomorrow] };
+
+    } catch (err) {
+        console.error("فشل جلب البيانات من Gist:", err.message);
+        return null;
+    }
+}
+
+// ================= حذف الملف من Gist بعد الإرسال الناجح =================
+async function deleteShiftsFileFromGist() {
+    try {
+        const updatePayload = {
+            description: "حذف ورديات الغد بعد الإرسال",
+            files: {
+                [SHIFTS_GIST_FILENAME]: null  // null = حذف الملف
+            }
+        };
+
+        const response = await fetch(GIST_API_URL, {
+            method: "PATCH",
+            headers: HEADERS,
+            body: JSON.stringify(updatePayload)
+        });
+
+        if (response.ok) {
+            console.log("تم حذف ملف shifts_data.json من الـ Gist بنجاح");
+        } else {
+            console.error("فشل حذف الملف من Gist:", await response.text());
+        }
+    } catch (err) {
+        console.error("خطأ أثناء حذف الملف:", err.message);
+    }
+}
+
+// ================= تنسيق الرسالة =================
+function formatMessage(shiftsData, dateKey) {
+    const dateObj = new Date(dateKey);
+    const formattedDate = format(dateObj, "EEEE dd/MM");
+
+    let text = `ورديات الغد\n${formattedDate}\n`;
+    text += "══════════════════════════════\n\n";
+
+    const order = ["Day", "Day Work", "Night", "lista"];
+    const seen = new Set();
+
+    // الأولوية حسب الترتيب
+    for (const type of order) {
+        if (shiftsData.shifts[type]) {
+            text += `${type}\n`;
+            for (const p of shiftsData.shifts[type]) {
+                const key = `${p.name}|${p.phone}`;
+                if (!seen.has(key)) {
+                    text += `• ${p.name}\n`;
+                    if (p.phone && p.phone !== "غير معروف") {
+                        text += `  (${p.phone})\n`;
+                    }
+                    seen.add(key);
                 }
-            });
+            }
+            text += "\n";
         }
+    }
 
-        if (connection === "open") {
-            console.log("تم الاتصال بنجاح بواتساب!");
-            console.log("البوت جاهز لإرسال ورديات الغد يوميًا من 8:00 إلى 8:44 صباحًا بتوقيت مصر");
+    // باقي الأنواع (إن وجدت)
+    for (const type in shiftsData.shifts) {
+        if (!order.includes(type)) {
+            text += `${type}\n`;
+            for (const p of shiftsData.shifts[type]) {
+                const key = `${p.name}|${p.phone}`;
+                if (!seen.has(key)) {
+                    text += `• ${p.name}\n`;
+                    if (p.phone && p.phone !== "غير معروف") {
+                        text += `  (${p.phone})\n`;
+                    }
+                    seen.add(key);
+                }
+            }
+            text += "\n";
         }
+    }
 
-        if (connection === "close") {
-            const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log(shouldReconnect ? "انقطع الاتصال... جاري إعادة الاتصال" : "تم تسجيل الخروج");
-            if (shouldReconnect) setTimeout(connectToWhatsApp, 5000);
-        }
-    });
+    // إضافة إحصائيات (اختياري)
+    if (shiftsData.retry_stats?.successful_members?.length > 0) {
+        text += `تم جلب ${shiftsData.retry_stats.successful_members.length} عضو بنجاح\n`;
+        text += `آخر تحديث: ${format(new Date(shiftsData.timestamp), "HH:mm")}`;
+    }
 
-    // ================= الجدولة اليومية (من 8:00 إلى 8:44 صباحًا) =================
+    return text.trim();
+}
+
+// ================= الجدولة اليومية =================
+async function startScheduler(sock) {
     setInterval(async () => {
         try {
             const nowEgypt = toZonedTime(new Date(), "Africa/Cairo");
@@ -70,154 +148,79 @@ async function connectToWhatsApp() {
             const minute = nowEgypt.getMinutes();
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
-            // نفس شرط البوت الأصلي بالظبط
-            if (hour === 22 && minute < 55 && lastSentDate !== todayStr) {
-                console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري جلب ورديات الغد...`);
-                console.log("-".repeat(60));
+            // من 8:00 إلى 8:44 صباحًا (يمكنك تغييرها إلى 10:00 زي ما تحب)
+            if (hour === 8 && minute < 45 && lastSentDate !== todayStr) {
 
-                const result = await fetchTomorrowShifts();
+                console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد في الـ Gist...`);
 
-                if (result) {
-                    const message = formatMessage(result);
-                    await sock.sendMessage(TARGET_GROUP_ID, { text: message });
-                    console.log("تم إرسال ورديات الغد بنجاح إلى الجروب!");
-                } else {
-                    await sock.sendMessage(TARGET_GROUP_ID, { text: "فشل جلب ورديات الغد اليوم... سأحاول غدًا إن شاء الله" });
-                    console.log("فشل جلب الورديات");
+                const result = await fetchShiftsFromGist();
+
+                if (!result) {
+                    console.log("لا توجد ورديات جديدة في الـ Gist اليوم");
+                    return;
                 }
 
-                console.log("-".repeat(60));
+                const message = formatMessage(result.shiftsData, result.dateKey);
+
+                await sock.sendMessage(TARGET_GROUP_ID, { text: message });
+                console.log("تم إرسال ورديات الغد بنجاح إلى الجروب!");
+
+                // حذف الملف بعد الإرسال الناجح
+                await deleteShiftsFileFromGist();
+
                 lastSentDate = todayStr;
+                console.log("-".repeat(60));
             }
         } catch (err) {
             console.error("خطأ في الجدولة:", err.message);
         }
-    }, 9000); // كل 9 ثواني مثل البوت الأصلي
+    }, 10_000); // كل 10 ثواني
 }
 
-// ================= جلب ورديات الغد من Gist =================
-async function fetchTomorrowShifts() {
-    const tomorrow = addDays(new Date(), 1);
-    const targetDate = format(tomorrow, "yyyy-MM-dd");
+// ================= الاتصال بواتساب =================
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState("./auth");
 
-    const headers = {
-        'Authorization': `token ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-    };
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: false,
+        logger: pino({ level: "silent" }),
+        browser: ["Wardyati Bot", "Chrome", "121.0"],
+    });
 
-    try {
-        // جلب الـ Gist
-        const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
-        if (!response.ok) {
-            console.error("فشل جلب الـ Gist:", response.status);
-            return null;
-        }
+    sock.ev.on("creds.update", saveCreds);
 
-        const gistData = await response.json();
-
-        if (!gistData.files || !gistData.files[SHIFTS_GIST_FILENAME]) {
-            console.log("لم يتم العثور على الملف في الـ Gist!");
-            return null;
-        }
-
-        const content = gistData.files[SHIFTS_GIST_FILENAME].content;
-        const jsonData = JSON.parse(content);
-
-        if (!jsonData[targetDate] || !jsonData[targetDate].shifts) {
-            return {
-                date: format(tomorrow, "EEEE dd/MM"),
-                message: "لا توجد ورديات الغد (إجازة أو لم تُحدد بعد)"
-            };
-        }
-
-        const shifts = jsonData[targetDate].shifts;
-
-        // حذف الملف من الـ Gist بعد الجلب
-        const deleteBody = {
-            files: {
-                [SHIFTS_GIST_FILENAME]: null
-            }
-        };
-
-        const deleteResponse = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify(deleteBody)
-        });
-
-        if (!deleteResponse.ok) {
-            console.error("فشل حذف الملف من الـ Gist:", deleteResponse.status);
-        } else {
-            console.log("تم حذف ملف shifts_data.json من الـ Gist بنجاح");
-        }
-
-        return { date: format(tomorrow, "EEEE dd/MM"), shifts };
-    } catch (err) {
-        console.error("فشل جلب الورديات من الـ Gist:", err.message);
-        return null;
-    }
-}
-
-// ================= تنسيق الرسالة =================
-function formatMessage(result) {
-    if (!result) return "فشل جلب الورديات اليوم";
-
-    let text = `ورديات الغد\n${result.date}\n`;
-    text += "══════════════════════════════\n\n";
-
-    const order = ["Day", "Day Work", "Night"];
-    const seen = new Set();
-
-    for (const type of order) {
-        if (result.shifts?.[type]) {
-            text += `${type}\n`;
-            for (const p of result.shifts[type]) {
-                const key = `${p.name}|${p.phone}`;
-                if (!seen.has(key)) {
-                    text += `• ${p.name}\n`;
-                    if (p.phone) text += `  (${p.phone})\n`;
-                    seen.add(key);
+    sock.ev.on("connection.update", (update) => {
+        const { connection, qr } = update;
+        if (qr) {
+            console.clear();
+            console.log("امسح الـ QR الجديد:");
+            qrcode.toDataURL(qr, (err, url) => {
+                if (!err) {
+                    global.qrImage = url;
+                    console.log("http://localhost:5000");
                 }
-            }
-            text += "\n";
+            });
         }
-    }
-
-    // الأنواع الأخرى
-    for (const type in result.shifts) {
-        if (!order.includes(type) && !seen.has(type)) {
-            text += `${type}\n`;
-            for (const p of result.shifts[type]) {
-                const key = `${p.name}|${p.phone}`;
-                if (!seen.has(key)) {
-                    text += `• ${p.name}\n`;
-                    if (p.phone) text += `  (${p.phone})\n`;
-                    seen.add(key);
-                }
-            }
-            text += "\n";
+        if (connection === "open") {
+            console.log("تم الاتصال بواتساب بنجاح!");
+            startScheduler(sock); // بدء الجدولة بعد الاتصال
         }
-    }
-
-    if (result.message) {
-        text = `ورديات الغد\n${result.date}\n`;
-        text += "══════════════════════════════\n";
-        text += result.message;
-    }
-
-    return text.trim();
+        if (connection === "close") {
+            const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) setTimeout(connectToWhatsApp, 5000);
+        }
+    });
 }
 
-// ================= سيرفر عرض الـ QR =================
+// ================= سيرفر الـ QR =================
 require("express")()
     .get("/", (req, res) => {
         res.send(global.qrImage
-            ? `<h1 style="text-align:center;color:green">امسح الـ QR بسرعة!</h1><center><img src="${global.qrImage}" width="400"></center>`
-            : `<h1>جاري توليد الـ QR... انتظر</h1><script>setTimeout(() => location.reload(), 3000);</script>`
+            ? `<center><h1 style="color:green">امسح الـ QR</h1><img src="${global.qrImage}" width="400"></center>`
+            : `<h1>جاري توليد الـ QR... <script>setTimeout(() => location.reload(), 3000);</script></h1>`
         );
     })
-    .listen(5000, () => console.log("افتح الرابط لرؤية الـ QR: http://localhost:5000"));
+    .listen(5000, () => console.log("افتح: http://localhost:5000"));
 
-// ================= بدء البوت =================
 connectToWhatsApp();
