@@ -1,13 +1,14 @@
 {
   "name": "wardyati-bot",
   "version": "1.0.0",
-  "description": "بوت ورديات جراحة غدد - يتخطى Cloudflare بـ FlareSolverr",
+  "description": "بوت ورديات جراحة غدد - يتخطى Cloudflare باستخدام cloudscraper متقدم",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["whatsapp", "bot", "wardyati", "shifts"],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -19,7 +20,18 @@
     "express": "^4.21.0",
     "pino": "^9.4.0",
     "qrcode": "^1.5.4",
-    "node-fetch": "^3.3.2",
-    "request": "^2.88.2"
+    "axios": "^1.6.7",
+    "user-agents": "^1.1.7",
+    "crypto": "^1.0.1",
+    "form-data": "^4.0.0",
+    "node-cache": "^5.1.2",
+    "request": "^2.88.2",
+    "request-promise": "^4.2.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
