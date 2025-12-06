@@ -130,11 +130,7 @@ function formatMessage(shiftsData, dateKey) {
         }
     }
 
-    // إضافة إحصائيات (اختياري)
-    if (shiftsData.retry_stats?.successful_members?.length > 0) {
-        text += `تم جلب ${shiftsData.retry_stats.successful_members.length} عضو بنجاح\n`;
-        text += `آخر تحديث: ${format(new Date(shiftsData.timestamp), "HH:mm")}`;
-    }
+    
 
     return text.trim();
 }
