@@ -278,7 +278,7 @@ let sock;
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // نفس شرط البوت الأصلي بالظبط
-            if (hour === 10 && minute < 55 && lastSentDate !== todayStr) {
+            if (hour === 16 && minute < 55 && lastSentDate !== todayStr) {
                 if (!isConnected) {
                     console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] البوت غير متصل بواتساب... انتظر الاتصال`);
                     return;
