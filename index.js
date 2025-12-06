@@ -3,8 +3,8 @@ const qrcode = require("qrcode");
 const { format, addDays } = require("date-fns");
 const { toZonedTime } = require("date-fns-tz");
 const pino = require("pino");
-const fetch = require("node-fetch"); // تأكد من تثبيته: npm install node-fetch@2
 
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 // ================= إعدادات Gist =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
 const SHIFTS_GIST_FILENAME = "shifts_data.json";
