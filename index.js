@@ -91,7 +91,7 @@ function formatMessage(shiftsData, dateKey) {
     const LTR = "\u200E";  // Left-to-Right Mark
     const RTL = "\u200F";  // Right-to-Left Mark
 
-    let text = `${LTR}*_ورديات يوم ${formattedDate}_*\n`;
+    let text = `${LTR}*_${formattedDate}_*\n`;
     text += `${LTR}══════════════════════════════\n\n`;
 
     const order = ["Day", "Day Work", "Night", "lista"];
