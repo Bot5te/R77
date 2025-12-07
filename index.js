@@ -82,12 +82,10 @@ async function deleteShiftsFileFromGist() {
     }
 }
 
-// استبدل دالة formatMessage بهذا الكود بالكامل
 function formatMessage(shiftsData, dateKey) {
     const dateObj = new Date(dateKey);
     const formattedDate = format(dateObj, "EEEE dd/MM/yyyy");
 
-    // أحرف التحكم في الاتجاه
     const LTR = "\u200E";  // Left-to-Right Mark
     const RTL = "\u200F";  // Right-to-Left Mark
 
@@ -112,15 +110,19 @@ function formatMessage(shiftsData, dateKey) {
                 ? p.phone.trim()
                 : null;
 
-            // السطر الأول: النقطة + الاسم (من الشمال لليمين)
+            // الاسم في سطر منفصل (من الشمال لليمين)
             text += `${LTR}• ${LTR}${name}\n`;
 
-            // السطر الثاني: الرقم لوحده من اليمين للشمال (زي الصورة بالضبط)
+            // الرقم في السطر التالي مباشرة بدون أي فراغ إضافي
             if (phone) {
                 text += `${RTL}(${phone})\n`;
+            } else {
+                text += `\n`; // لو مفيش رقم، نترك سطر فاضي عشان التنسيق ما يبوظش
             }
-            text += `\n`; // مسافة بين كل شخص واللي بعده
         }
+
+        // بعد انتهاء كل قسم (Day/Night...) نترك سطرين فاضيين فقط
+        text += `\n`;
     };
 
     for (const type of order) addShift(type);
