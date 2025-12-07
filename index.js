@@ -5,14 +5,13 @@ const { toZonedTime } = require("date-fns-tz");
 const pino = require("pino");
 
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
 // ================= إعدادات Gist =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
 const SHIFTS_GIST_FILENAME = "shifts_data.json";
 const part1 = "ghp_26iDRXBM6Vh9m";
 const part2 = "egs7uCr6eEMi3It0T0UB3xJ";
-
 const GITHUB_TOKEN = part1 + part2;
-
 
 const GIST_API_URL = `https://api.github.com/gists/${GIST_ID}`;
 const HEADERS = {
@@ -63,7 +62,7 @@ async function deleteShiftsFileFromGist() {
         const updatePayload = {
             description: "حذف ورديات الغد بعد الإرسال",
             files: {
-                [SHIFTS_GIST_FILENAME]: null  // null = حذف الملف
+                [SHIFTS_GIST_FILENAME]: null
             }
         };
 
@@ -83,22 +82,21 @@ async function deleteShiftsFileFromGist() {
     }
 }
 
-// ================= تنسيق الرسالة (النسخة المحسّنة) =================
+// ================= تنسيق الرسالة (محسّنة) =================
 function formatMessage(shiftsData, dateKey) {
     const dateObj = new Date(dateKey);
     const formattedDate = format(dateObj, "EEEE dd/MM/yyyy");
 
-    let text = `*_ورديات يوم ${_formattedDate}_*\n`;
+    let text = `*_ورديات يوم ${formattedDate}_*\n`;
     text += "══════════════════════════════\n\n";
 
     const order = ["Day", "Day Work", "Night", "lista"];
-    const seen = new Set(); // لتفادي تكرار الأسماء
+    const seen = new Set();
 
-    // دالة مساعدة لإضافة شيفت واحد
     const addShift = (type) => {
         if (!shiftsData.shifts[type] || shiftsData.shifts[type].length === 0) return;
 
-        text += `*${type}*\n\n`; // العنوان bold + سطر فارغ تحته
+        text += `*${type}*\n\n`;
 
         for (const p of shiftsData.shifts[type]) {
             const key = `${p.name}|${p.phone}`;
@@ -111,19 +109,12 @@ function formatMessage(shiftsData, dateKey) {
                 seen.add(key);
             }
         }
-        text += `\n`; // سطر فارغ بعد انتهاء الشيفت (فاصل جميل)
+        text += `\n`;
     };
 
-    // الأولوية حسب الترتيب المطلوب
-    for (const type of order) {
-        addShift(type);
-    }
-
-    // باقي الأنواع التي خارج الترتيب (لو فيه أي شيفتات إضافية)
+    for (const type of order) addShift(type);
     for (const type in shiftsData.shifts) {
-        if (!order.includes(type)) {
-            addShift(type);
-        }
+        if (!order.includes(type)) addShift(type);
     }
 
     return text.trim();
@@ -138,24 +129,23 @@ async function startScheduler(sock) {
             const minute = nowEgypt.getMinutes();
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
-            // من 8:00 إلى 8:44 صباحًا (يمكنك تغييرها إلى 10:00 زي ما تحب)
+            // الساعة 14:00 (2 ظهرًا) – يمكنك تغييرها لأي وقت تحبه
             if (hour === 14 && minute < 60 && lastSentDate !== todayStr) {
 
-                console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد في الـ Gist...`);
+                console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد...`);
 
                 const result = await fetchShiftsFromGist();
 
                 if (!result) {
-                    console.log("لا توجد ورديات جديدة في الـ Gist اليوم");
+                    console.log("لا توجد ورديات جديدة اليوم");
                     return;
                 }
 
                 const message = formatMessage(result.shiftsData, result.dateKey);
 
                 await sock.sendMessage(TARGET_GROUP_ID, { text: message });
-                console.log("تم إرسال ورديات الغد بنجاح إلى الجروب!");
+                console.log("تم إرسال ورديات الغد بنجاح!");
 
-                // حذف الملف بعد الإرسال الناجح
                 await deleteShiftsFileFromGist();
 
                 lastSentDate = todayStr;
@@ -164,10 +154,10 @@ async function startScheduler(sock) {
         } catch (err) {
             console.error("خطأ في الجدولة:", err.message);
         }
-    }, 4 * 60 * 1000); // كل 4 دقائق بالضبط
+    }, 4 * 60 * 1000); // كل 4 دقائق
 }
 
-// ================= الاتصال بواتساب =================
+// ================= الاتصال بواتساب + الأمر id =================
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState("./auth");
 
@@ -180,8 +170,31 @@ async function connectToWhatsApp() {
 
     sock.ev.on("creds.update", saveCreds);
 
+    // ================= معالجة الرسائل (أمر id) =================
+    sock.ev.on("messages.upsert", async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message) return;
+
+        const from = msg.key.remoteJid;
+        const text = (msg.message.conversation ||
+                      msg.message.extendedTextMessage?.text || "").trim().toLowerCase();
+
+        // أمر "id" لإظهار معرف الجروب
+        if (from.endsWith("@g.us") && text === "id") {
+            if (msg.key.fromMe) return; // تجاهل رسائل البوت نفسه
+
+            await sock.sendMessage(from, {
+                text: `معرف هذا الجروب هو:\n\n\`${from}\``
+            }, { quoted: msg });
+
+            console.log(`تم إرسال ID الجروب المطلوب: ${from}`);
+        }
+    });
+
+    // ================= تحديثات الاتصال وقراءة QR =================
     sock.ev.on("connection.update", (update) => {
         const { connection, qr } = update;
+
         if (qr) {
             console.clear();
             console.log("امسح الـ QR الجديد:");
@@ -192,42 +205,25 @@ async function connectToWhatsApp() {
                 }
             });
         }
+
         if (connection === "open") {
             console.log("تم الاتصال بواتساب بنجاح!");
             startScheduler(sock); // بدء الجدولة بعد الاتصال
         }
+
         if (connection === "close") {
             const shouldReconnect = update.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) setTimeout(connectToWhatsApp, 5000);
+            if (shouldReconnect) {
+                console.log("جاري إعادة الاتصال...");
+                setTimeout(connectToWhatsApp, 5000);
+            } else {
+                console.log("تم تسجيل الخروج يدويًا – لن يتم إعادة الاتصال.");
+            }
         }
     });
 }
 
-// ================= أمر مؤقت: كتابة "id" تطلع معرف الجروب =================
-sock.ev.on("messages.upsert", async (m) => {
-    const msg = m.messages[0];
-    if (!msg.message) return;
-
-    const from = msg.key.remoteJid;
-    const text = (msg.message.conversation || 
-                  msg.message.extendedTextMessage?.text || "").trim().toLowerCase();
-
-    // لو الرسالة من جروب وكتب "id" بالضبط
-    if (from.endsWith("@g.us") && text === "id") {
-        // منع التكرار لو الرسالة من البوت نفسه
-        if (msg.key.fromMe) return;
-
-        await sock.sendMessage(from, { 
-            text: `معرف هذا الجروب هو:\n\n\`${from}\`` 
-        }, { quoted: msg });
-
-        console.log(`تم طلب ID الجروب من ${from}`);
-    }
-});
-
-
-
-// ================= سيرفر الـ QR =================
+// ================= سيرفر عرض الـ QR =================
 require("express")()
     .get("/", (req, res) => {
         res.send(global.qrImage
@@ -235,6 +231,6 @@ require("express")()
             : `<h1>جاري توليد الـ QR... <script>setTimeout(() => location.reload(), 3000);</script></h1>`
         );
     })
-    .listen(5000, () => console.log("افتح: http://localhost:5000"));
+    .listen(5000, () => console.log("افتح المتصفح: http://localhost:5000"));
 
 connectToWhatsApp();
