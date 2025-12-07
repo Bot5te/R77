@@ -82,13 +82,17 @@ async function deleteShiftsFileFromGist() {
     }
 }
 
-// ================= تنسيق الرسالة (محسّنة) =================
+// استبدل دالة formatMessage بهذا الكود بالكامل
 function formatMessage(shiftsData, dateKey) {
     const dateObj = new Date(dateKey);
     const formattedDate = format(dateObj, "EEEE dd/MM/yyyy");
 
-    let text = `*_ورديات يوم ${formattedDate}_*\n`;
-    text += "══════════════════════════════\n\n";
+    // أحرف التحكم في الاتجاه
+    const LTR = "\u200E";  // Left-to-Right Mark
+    const RTL = "\u200F";  // Right-to-Left Mark
+
+    let text = `${LTR}*_ورديات يوم ${formattedDate}_*\n`;
+    text += `${LTR}══════════════════════════════\n\n`;
 
     const order = ["Day", "Day Work", "Night", "lista"];
     const seen = new Set();
@@ -96,20 +100,27 @@ function formatMessage(shiftsData, dateKey) {
     const addShift = (type) => {
         if (!shiftsData.shifts[type] || shiftsData.shifts[type].length === 0) return;
 
-        text += `*${type}*\n\n`;
+        text += `${LTR}*${type}*\n\n`;
 
         for (const p of shiftsData.shifts[type]) {
             const key = `${p.name}|${p.phone}`;
-            if (!seen.has(key)) {
-                text += `• ${p.name}`;
-                if (p.phone && p.phone !== "غير معروف" && p.phone.trim() !== "") {
-                    text += `  (${p.phone})`;
-                }
-                text += `\n`;
-                seen.add(key);
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const name = p.name.trim();
+            const phone = (p.phone && p.phone !== "غير معروف" && p.phone.trim() !== "")
+                ? p.phone.trim()
+                : null;
+
+            // السطر الأول: النقطة + الاسم (من الشمال لليمين)
+            text += `${LTR}• ${LTR}${name}\n`;
+
+            // السطر الثاني: الرقم لوحده من اليمين للشمال (زي الصورة بالضبط)
+            if (phone) {
+                text += `${RTL}(${phone})\n`;
             }
+            text += `\n`; // مسافة بين كل شخص واللي بعده
         }
-        text += `\n`;
     };
 
     for (const type of order) addShift(type);
