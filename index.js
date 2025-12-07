@@ -139,7 +139,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // من 8:00 إلى 8:44 صباحًا (يمكنك تغييرها إلى 10:00 زي ما تحب)
-            if (hour === 13 && minute < 60 && lastSentDate !== todayStr) {
+            if (hour === 14 && minute < 60 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد في الـ Gist...`);
 
@@ -202,6 +202,30 @@ async function connectToWhatsApp() {
         }
     });
 }
+
+// ================= أمر مؤقت: كتابة "id" تطلع معرف الجروب =================
+sock.ev.on("messages.upsert", async (m) => {
+    const msg = m.messages[0];
+    if (!msg.message) return;
+
+    const from = msg.key.remoteJid;
+    const text = (msg.message.conversation || 
+                  msg.message.extendedTextMessage?.text || "").trim().toLowerCase();
+
+    // لو الرسالة من جروب وكتب "id" بالضبط
+    if (from.endsWith("@g.us") && text === "id") {
+        // منع التكرار لو الرسالة من البوت نفسه
+        if (msg.key.fromMe) return;
+
+        await sock.sendMessage(from, { 
+            text: `معرف هذا الجروب هو:\n\n\`${from}\`` 
+        }, { quoted: msg });
+
+        console.log(`تم طلب ID الجروب من ${from}`);
+    }
+});
+
+
 
 // ================= سيرفر الـ QR =================
 require("express")()
