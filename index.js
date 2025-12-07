@@ -111,7 +111,7 @@ function formatMessage(shiftsData, dateKey) {
                 : null;
 
             // الاسم في سطر منفصل (من الشمال لليمين)
-            text += `${LTR}• ${LTR}${name}\n`;
+            text += `${LTR}▪️ ${LTR}${name}\n`;
 
             // الرقم في السطر التالي مباشرة بدون أي فراغ إضافي
             if (phone) {
@@ -195,11 +195,13 @@ async function connectToWhatsApp() {
         // أمر "id" لإظهار معرف الجروب
         if (from.endsWith("@g.us") && text === "id") {
             if (msg.key.fromMe) return; // تجاهل رسائل البوت نفسه
-
+            /*
             await sock.sendMessage(from, {
                 text: `معرف هذا الجروب هو:\n\n\`${from}\``
             }, { quoted: msg });
+            */
 
+        
             console.log(`تم إرسال ID الجروب المطلوب: ${from}`);
         }
     });
