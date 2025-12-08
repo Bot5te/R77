@@ -21,7 +21,7 @@ const HEADERS = {
 };
 
 // ================= إعدادات البوت =================
-const TARGET_GROUP_ID = "120363410674115070@g.us";
+const TARGET_GROUP_ID = "120363405055654072@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
@@ -143,7 +143,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // الساعة 14:00 (2 ظهرًا) – يمكنك تغييرها لأي وقت تحبه
-            if (hour === 23 && minute < 60 && lastSentDate !== todayStr) {
+            if (hour === 15 && minute < 60 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد...`);
 
