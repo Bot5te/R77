@@ -8,7 +8,7 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 
 // ================= إعدادات Gist =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
-const SHIFTS_GIST_FILENAME = "shifts_data.json";
+const SHIFTS_GIST_FILENAME = "shifts_datatry.json";
 const part1 = "ghp_26iDRXBM6Vh9m";
 const part2 = "egs7uCr6eEMi3It0T0UB3xJ";
 const GITHUB_TOKEN = part1 + part2;
