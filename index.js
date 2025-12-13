@@ -82,19 +82,19 @@ async function deleteShiftsFileFromGist() {
     }
 }
 
+
 function formatMessage(shiftsData, dateKey) {
     const dateObj = new Date(dateKey);
     const formattedDate = format(dateObj, "EEEE dd/MM/yyyy");
 
-    const LTR = "\u200E";  // Left-to-Right Mark
-    const RTL = "\u200F";  // Right-to-Left Mark
+    const LTR = "\u200E";
+    const RTL = "\u200F";
 
     let text = `${LTR}*_${formattedDate}_*\n`;
     text += `${LTR}══════════════════════════════\n\n`;
 
     const seen = new Set();
 
-    // دالة لإضافة شخص
     const addPerson = (p) => {
         const key = `${p.name}|${p.phone}`;
         if (seen.has(key)) return;
@@ -113,7 +113,6 @@ function formatMessage(shiftsData, dateKey) {
         }
     };
 
-    // دالة لإضافة قسم كامل
     const addSection = (type) => {
         if (!shiftsData.shifts[type] || shiftsData.shifts[type].length === 0) return false;
 
@@ -122,66 +121,58 @@ function formatMessage(shiftsData, dateKey) {
         for (const p of shiftsData.shifts[type]) {
             addPerson(p);
         }
-        text += `\n`; // سطرين فارغين بعد كل قسم
+        text += `\n`;
         return true;
     };
 
-    // === قوائم الأولوية اليدوية ===
+    // === قوائم الأولوية المطابقة للـ JSON بالضبط ===
     const dayPriority = [
-        "ER ADMISSIONS – DAY",
-        "ER GENERAL – DAY",
-        "ER PT – DAY",
-        "ER TRIAGE – DAY",
-        "ER WARD – DAY"
-        // أضف المزيد هنا إذا لزم الأمر، مثل "ER OBS – DAY" إلخ
+        "ER ADMISSIONS -DAY-🚨☀️",
+        "ER GENERAL-DAY-🚨☀️",
+        "ER PT-DAY-🚨☀️",
+        "ER TRIAGE-DAY-🚨☀️",
+        "ER WARD-DAY-🚨☀️"
     ];
 
     const nightPriority = [
-        "ER ADMISSION-NIGHT",
-        "ER GENERAL-NIGHT",
-        "ER PT-NIGHT",
-        "ER TRIAGE-NIGHT",
-        "ER WARD-NIGHT"
-        // أضف حسب الحاجة
+        "ER ADMISSION-NIGHT-🚨🌙",
+        "ER PT-NIGHT-🚨🌙",
+        "ER GENERAL-NIGHT-🚨🌙",
+        "ER WARD-NIGHT-🚨🌙",
+        "ER TRIAGE-NIGHT-🚨🌙"
     ];
 
-    // متغيرات لتتبع ما إذا تم طباعة أي قسم في Day أو Night
     let hasDay = false;
     let hasNight = false;
 
-    // === 1. طباعة أقسام الـ Day حسب الأولوية ===
-    // أولاً: الأقسام ذات الأولوية
+    // Day: الأولوية أولاً
     for (const type of dayPriority) {
         if (shiftsData.shifts[type]) {
             if (addSection(type)) hasDay = true;
         }
     }
-
-    // ثانيًا: باقي أقسام الـ Day التي تحتوي على "DAY" لكن ليست في القائمة المحددة
+    // باقي Day غير المدرجة في الأولوية
     for (const type in shiftsData.shifts) {
         if (type.toUpperCase().includes("DAY") && !dayPriority.includes(type)) {
             if (addSection(type)) hasDay = true;
         }
     }
-
-    // فصل إضافي إذا كان هناك Day وستأتي Night بعده
     if (hasDay) text += `\n`;
 
-    // === 2. طباعة أقسام الـ Night حسب الأولوية ===
+    // Night: الأولوية أولاً
     for (const type of nightPriority) {
         if (shiftsData.shifts[type]) {
             if (addSection(type)) hasNight = true;
         }
     }
-
-    // باقي أقسام الـ Night التي تحتوي على "NIGHT" لكن ليست في القائمة
+    // باقي Night
     for (const type in shiftsData.shifts) {
         if (type.toUpperCase().includes("NIGHT") && !nightPriority.includes(type)) {
             if (addSection(type)) hasNight = true;
         }
     }
 
-    // === 3. أي أقسام أخرى لا تحتوي على DAY أو NIGHT (مثل "lista") ===
+    // أقسام أخرى
     for (const type in shiftsData.shifts) {
         const upper = type.toUpperCase();
         if (!upper.includes("DAY") && !upper.includes("NIGHT")) {
@@ -202,7 +193,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // الساعة 14:00 (2 ظهرًا) – يمكنك تغييرها لأي وقت تحبه
-            if (hour === 17 && minute < 60 && lastSentDate !== todayStr) {
+            if (hour === 18 && minute < 60 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد...`);
 
