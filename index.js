@@ -92,42 +92,101 @@ function formatMessage(shiftsData, dateKey) {
     let text = `${LTR}*_${formattedDate}_*\n`;
     text += `${LTR}══════════════════════════════\n\n`;
 
-    const order = ["Day", "Day Work", "Night", "lista"];
     const seen = new Set();
 
-    const addShift = (type) => {
-        if (!shiftsData.shifts[type] || shiftsData.shifts[type].length === 0) return;
+    // دالة لإضافة شخص
+    const addPerson = (p) => {
+        const key = `${p.name}|${p.phone}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        const name = p.name.trim();
+        const phone = (p.phone && p.phone !== "غير معروف" && p.phone.trim() !== "")
+            ? p.phone.trim()
+            : null;
+
+        text += `${LTR}▪️ ${LTR}${name}\n`;
+        if (phone) {
+            text += `${RTL}(${phone})\n`;
+        } else {
+            text += `\n`;
+        }
+    };
+
+    // دالة لإضافة قسم كامل
+    const addSection = (type) => {
+        if (!shiftsData.shifts[type] || shiftsData.shifts[type].length === 0) return false;
 
         text += `${LTR}*${type}*\n\n`;
 
         for (const p of shiftsData.shifts[type]) {
-            const key = `${p.name}|${p.phone}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            const name = p.name.trim();
-            const phone = (p.phone && p.phone !== "غير معروف" && p.phone.trim() !== "")
-                ? p.phone.trim()
-                : null;
-
-            // الاسم في سطر منفصل (من الشمال لليمين)
-            text += `${LTR}▪️ ${LTR}${name}\n`;
-
-            // الرقم في السطر التالي مباشرة بدون أي فراغ إضافي
-            if (phone) {
-                text += `${RTL}(${phone})\n`;
-            } else {
-                text += `\n`; // لو مفيش رقم، نترك سطر فاضي عشان التنسيق ما يبوظش
-            }
+            addPerson(p);
         }
-
-        // بعد انتهاء كل قسم (Day/Night...) نترك سطرين فاضيين فقط
-        text += `\n`;
+        text += `\n`; // سطرين فارغين بعد كل قسم
+        return true;
     };
 
-    for (const type of order) addShift(type);
+    // === قوائم الأولوية اليدوية ===
+    const dayPriority = [
+        "ER ADMISSIONS – DAY",
+        "ER GENERAL – DAY",
+        "ER PT – DAY",
+        "ER TRIAGE – DAY",
+        "ER WARD – DAY"
+        // أضف المزيد هنا إذا لزم الأمر، مثل "ER OBS – DAY" إلخ
+    ];
+
+    const nightPriority = [
+        "ER ADMISSION-NIGHT",
+        "ER GENERAL-NIGHT",
+        "ER PT-NIGHT",
+        "ER TRIAGE-NIGHT",
+        "ER WARD-NIGHT"
+        // أضف حسب الحاجة
+    ];
+
+    // متغيرات لتتبع ما إذا تم طباعة أي قسم في Day أو Night
+    let hasDay = false;
+    let hasNight = false;
+
+    // === 1. طباعة أقسام الـ Day حسب الأولوية ===
+    // أولاً: الأقسام ذات الأولوية
+    for (const type of dayPriority) {
+        if (shiftsData.shifts[type]) {
+            if (addSection(type)) hasDay = true;
+        }
+    }
+
+    // ثانيًا: باقي أقسام الـ Day التي تحتوي على "DAY" لكن ليست في القائمة المحددة
     for (const type in shiftsData.shifts) {
-        if (!order.includes(type)) addShift(type);
+        if (type.toUpperCase().includes("DAY") && !dayPriority.includes(type)) {
+            if (addSection(type)) hasDay = true;
+        }
+    }
+
+    // فصل إضافي إذا كان هناك Day وستأتي Night بعده
+    if (hasDay) text += `\n`;
+
+    // === 2. طباعة أقسام الـ Night حسب الأولوية ===
+    for (const type of nightPriority) {
+        if (shiftsData.shifts[type]) {
+            if (addSection(type)) hasNight = true;
+        }
+    }
+
+    // باقي أقسام الـ Night التي تحتوي على "NIGHT" لكن ليست في القائمة
+    for (const type in shiftsData.shifts) {
+        if (type.toUpperCase().includes("NIGHT") && !nightPriority.includes(type)) {
+            if (addSection(type)) hasNight = true;
+        }
+    }
+
+    // === 3. أي أقسام أخرى لا تحتوي على DAY أو NIGHT (مثل "lista") ===
+    for (const type in shiftsData.shifts) {
+        const upper = type.toUpperCase();
+        if (!upper.includes("DAY") && !upper.includes("NIGHT")) {
+            addSection(type);
+        }
     }
 
     return text.trim();
@@ -143,7 +202,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // الساعة 14:00 (2 ظهرًا) – يمكنك تغييرها لأي وقت تحبه
-            if (hour === 16 && minute < 60 && lastSentDate !== todayStr) {
+            if (hour === 17 && minute < 60 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد...`);
 
