@@ -8,7 +8,7 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 
 // ================= إعدادات Gist =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
-const SHIFTS_GIST_FILENAME = "shifts_datatry.json";
+const SHIFTS_GIST_FILENAME = "shifts_data.json";
 const part1 = "ghp_26iDRXBM6Vh9m";
 const part2 = "egs7uCr6eEMi3It0T0UB3xJ";
 const GITHUB_TOKEN = part1 + part2;
@@ -21,7 +21,7 @@ const HEADERS = {
 };
 
 // ================= إعدادات البوت =================
-const TARGET_GROUP_ID = "120363410674115070@g.us";
+const TARGET_GROUP_ID = "120363405055654072@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
@@ -81,7 +81,6 @@ async function deleteShiftsFileFromGist() {
         console.error("خطأ أثناء حذف الملف:", err.message);
     }
 }
-
 
 function formatMessage(shiftsData, dateKey) {
     const dateObj = new Date(dateKey);
@@ -193,7 +192,7 @@ async function startScheduler(sock) {
             const todayStr = format(nowEgypt, "yyyy-MM-dd");
 
             // الساعة 14:00 (2 ظهرًا) – يمكنك تغييرها لأي وقت تحبه
-            if (hour === 18 && minute < 60 && lastSentDate !== todayStr) {
+            if (hour === 15 && minute < 60 && lastSentDate !== todayStr) {
 
                 console.log(`\n[${format(nowEgypt, "HH:mm:ss")}] جاري البحث عن ورديات الغد...`);
 
