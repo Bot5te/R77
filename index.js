@@ -60,7 +60,7 @@ async function updateRemoteLastSentDate(dateStr) {
 }
 
 // ================= إعدادات البوت =================
-const TARGET_GROUP_ID = "120363410674115070@g.us";
+const TARGET_GROUP_ID = "120363405055654072@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
