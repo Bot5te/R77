@@ -18,6 +18,7 @@
     "express": "latest",
     "pino": "latest",
     "qrcode": "latest",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "xlsx": "^0.18.5"
   }
 }
