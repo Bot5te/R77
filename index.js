@@ -60,7 +60,7 @@ async function updateRemoteLastSentDate(dateStr) {
 }
 
 // ================= إعدادات البوت =================
-const TARGET_GROUP_ID = "120363410674115070@g.us";
+const TARGET_GROUP_ID = "120363405055654072@g.us";
 let lastSentDate = null;
 global.qrImage = null;
 
@@ -312,7 +312,7 @@ async function startScheduler(sock) {
         } catch (err) {
             console.error("خطأ في الجدولة:", err.message);
         }
-    }, 1 * 10 * 1000); // كل دقيقة واحدة للتأكد من الإرسال الفوري
+    }, 15 * 60 * 1000); // كل دقيقة واحدة للتأكد من الإرسال الفوري
 }
 
 // ================= الاتصال بواتساب + الأمر id =================
