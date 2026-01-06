@@ -399,7 +399,7 @@ async function connectToWhatsApp() {
                 };
                 
                 runScheduler(); // تشغيل مرة فوراً
-                setInterval(runScheduler, 60000); // ثم كل دقيقة
+                setInterval(runScheduler, 10 * 60 * 1000); // ثم كل دقيقة
             });
         }
 
