@@ -21,7 +21,7 @@ const GROUPS = [
 
 // ================= إعدادات Gist لحفظ الحالة =================
 const GIST_ID = "cd4bd1519749da63f37eaa594199e1df";
-const STATUS_GIST_FILENAME = "bot_status303.json";
+const STATUS_GIST_FILENAME = "bot_status33.json";
 const part1 = "ghp_26iDRXBM6Vh9m";
 const part2 = "egs7uCr6eEMi3It0T0UB3xJ";
 const GITHUB_TOKEN = part1 + part2;
