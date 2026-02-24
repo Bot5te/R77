@@ -363,7 +363,7 @@ async function connectToWhatsApp() {
 
             // تشغيل الجدولة فورًا ثم كل 10 دقائق
             runScheduler(sock);
-            setInterval(() => runScheduler(sock), 30 * 60 * 1000);
+            setInterval(() => runScheduler(sock), 1 * 60 * 1000);
         }
 
         if (connection === "close") {
